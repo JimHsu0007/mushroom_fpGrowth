@@ -1,0 +1,159 @@
+import speech_recognition as sr
+import pyttsx3
+import pandas as pd
+import os
+
+class SpeechtoText:
+    def __init__(self):
+        self.rg = sr.Recognizer()
+
+    def listen(self):
+        with sr.Microphone() as source:
+            self.rg.adjust_for_ambient_noise(source, duration=0.2)
+            audioData = self.rg.listen(source)
+            try:
+                text = self.rg.recognize_google(audioData, language='zh-tw')
+            except:
+                text = ''
+        return text
+
+    def __call__(self):
+        return self.listen()
+
+def tts(command):
+    engine = pyttsx3.init()
+    engine.say(command)
+    engine.runAndWait()
+
+def listening():
+    stt = SpeechtoText()
+    text = ''
+    while text == '':
+        text = stt()
+        if text=='':
+          tts('請再說一次')
+        else:
+            print(f':{text}')
+            tts(text)
+            return text
+
+class Track:
+    def __init__(self):
+        self.columns = ['收入或支出', '項目名稱', '金額']
+        self.excel_file_path = 'output.xlsx'
+        self.df = self.load()
+
+    def load(self):  # 讀data
+        if os.path.exists(self.excel_file_path):
+            df = pd.read_excel(self.excel_file_path)
+        else:
+            df = pd.DataFrame(columns=self.columns)
+        return df
+
+    def save(self):  # 存data
+        self.df.to_excel(self.excel_file_path, index=False)
+    
+    def delete_data(self, query_value): # 刪除data
+        if query_value in self.df['項目名稱'].values:
+            self.df = self.df[~((self.df['項目名稱'] == query_value))]
+            self.save()
+            tts('刪除成功')
+        else:
+            print('找不到符合條件的資料，無法刪除')
+            tts('找不到符合條件的資料，無法刪除')
+
+    def recording(self):  # 記帳
+        print('-----記帳模式-----')
+        tts('記帳模式')
+        while True:
+            print('[新增][刪除][離開]')
+            tts('新增、刪除或離開')
+            line = listening()
+            if line == '新增':
+                data_dict = {}  # 使用字典來存放每筆資料
+                for column in self.columns:
+                    tts(column)
+                    data = listening()
+                    if column == '收入或支出':
+                        while data not in ['收入', '支出']:
+                            data = listening()
+                    elif column == '金額':
+                        try:
+                            data = int(data)
+                        except ValueError:
+                            tts('請再說一次')
+                            continue
+                    data_dict[column] = data  # 將資料加入字典
+                self.df = pd.concat([self.df, pd.DataFrame([data_dict])], ignore_index=True)
+                self.save()
+                tts('輸入成功')
+            elif line == '刪除':
+                print('-----刪除模式-----')
+                tts('請問您想刪除哪一筆項目？')
+                delete_value = listening()
+                tracking.delete_data(delete_value)
+            elif line == '離開':
+                print('-----離開記帳模式-----')
+                tts('已儲存目前資料，離開記帳模式')
+                break
+            else:
+                tts('請再說一次')
+        return
+
+    def costcounting(self):  # 計算支出
+        if not self.df.empty:
+            filtered_df = self.df[self.df['收入或支出'] == '支出']
+            total = filtered_df['金額'].sum()
+            return total
+        else:
+            return 0
+
+    def incomecounting(self):  # 計算收入
+        if not self.df.empty:
+            filtered_df = self.df[self.df['收入或支出'] == '收入']
+            total = filtered_df['金額'].sum()
+            return total
+
+print("你好，這裡是日記語音助理")
+tts("你好，這裡是日記語音助理")
+
+while True:
+    print('功能:[記帳][計算支出][計算收入][剩餘金額][查詢資料][離開]')
+    tts('請問有甚麼需要幫忙的？')
+    tracking = Track()
+    text = listening()
+    if text == '記帳':
+        tracking.recording()
+    elif text == '計算支出':
+        cost = tracking.costcounting()
+        print(f"目前總支出為{cost}")
+        tts(f"目前總支出為{cost}")
+    elif text == '計算收入':
+        income = tracking.incomecounting()
+        print(f"目前總收入為{income}")
+        tts(f"目前總收入為{income}")
+    elif text == '剩餘金額':
+        balance = tracking.incomecounting() - tracking.costcounting()
+        print(f"目前餘額為{balance}")
+        tts(f"目前餘額為{balance}")
+    elif text == '查詢資料':
+        print('-----查詢資料模式-----')
+        tts('請問您想查詢哪一項資料？請告訴我項目名稱')
+        query_value = listening()
+        filtered_df = tracking.df[tracking.df['項目名稱'] == query_value]
+        if not filtered_df.empty:
+            print('找到符合條件的資料如下:')
+            print('{:<10} {:<10} {:<10}'.format('項目名稱', '金額', '收入或支出'))
+            for index, row in filtered_df.iterrows():
+                print('{:<12} {:<12} {:<12}'.format(row["項目名稱"], row["金額"], row["收入或支出"]))
+            tts(f'找到符合條件的資料如下')
+        else:
+            print('找不到符合條件的資料')
+            tts('找不到符合條件的資料')
+    elif text == '離開':
+        print('-----已儲存資料並離開-----')
+        tts('離開日記語音助理')
+        break
+    else:
+        print("查無此功能")
+        tts("查無此功能")
